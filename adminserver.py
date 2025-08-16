@@ -67,4 +67,4 @@ while True:
     except Exception as e:
         print(f"Unexpected error: {str(e)}")
     
-    time.sleep(2)
+    time.sleep(15)
