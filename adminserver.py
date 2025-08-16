@@ -3,10 +3,12 @@ import subprocess
 import time
 import json
 import sys
+import os
 
 print("=== Admin Server Starting ===")
 print(f"Python version: {sys.version}")
 print(f"Executable: {sys.executable}")
+print(f"Working directory: {os.getcwd()}")
 
 API_BASE = "http://127.0.0.1:8000"
 ADMIN_TOKEN = "secret"
@@ -15,12 +17,61 @@ print(f"Configuration:\n- API_BASE: {API_BASE}\n- ADMIN_TOKEN: {ADMIN_TOKEN}")
 processes = {}
 print("Entering main loop...")
 
+def start_server(port):
+    """Start the mini server on specified port"""
+    try:
+        cmd = ["python3.10", "mini_server.py", str(port)]
+        print(f"Starting server with command: {' '.join(cmd)}")
+        
+        # Start process with output redirection
+        processes[port] = subprocess.Popen(
+            cmd,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            universal_newlines=True
+        )
+        print(f"Started server on port {port} (PID: {processes[port].pid})")
+        return True
+    except Exception as e:
+        print(f"Failed to start server on port {port}: {str(e)}")
+        if port in processes:
+            del processes[port]
+        return False
+
+def stop_server(port):
+    """Stop the mini server on specified port"""
+    if port not in processes:
+        return True
+        
+    try:
+        print(f"Stopping server on port {port} (PID: {processes[port].pid})")
+        processes[port].terminate()
+        
+        # Wait for process to end and capture output
+        try:
+            stdout, stderr = processes[port].communicate(timeout=5)
+            if stdout: print(f"Server stdout: {stdout}")
+            if stderr: print(f"Server stderr: {stderr}")
+        except subprocess.TimeoutExpired:
+            processes[port].kill()
+            print(f"Force killed server on port {port}")
+            
+        del processes[port]
+        print(f"Successfully stopped server on port {port}")
+        return True
+    except Exception as e:
+        print(f"Failed to stop server on port {port}: {str(e)}")
+        if port in processes:
+            del processes[port]
+        return False
+
 while True:
     print("\n=== New Iteration ===")
     print(f"Current time: {time.ctime()}")
-    print(f"Active processes: {processes}")
+    print(f"Active processes: {[f'{p}:{processes[p].pid}' for p in processes]}")
     
     try:
+        # Check API for meetings
         print("Making API request...")
         resp = requests.get(
             f"{API_BASE}/servere_meetings/",
@@ -28,8 +79,6 @@ while True:
             timeout=5
         )
         print(f"Response received. Status: {resp.status_code}")
-        print(f"Headers: {resp.headers}")
-        print(f"Content: {resp.text}")
         
         if resp.status_code != 200:
             print(f"Error: Bad status code {resp.status_code}")
@@ -38,57 +87,33 @@ while True:
             
         try:
             meetings = resp.json()
-            print(f"JSON parsed successfully: {meetings}")
+            print(f"Found {len(meetings)} meetings")
         except json.JSONDecodeError as e:
             print(f"JSON decode error: {str(e)}")
             time.sleep(2)
             continue
 
         # Process meetings
-        for i, m in enumerate(meetings):
-            print(f"\nProcessing meeting {i+1}/{len(meetings)}")
+        for m in meetings:
             if not isinstance(m, dict):
-                print(f"Skipping non-dict meeting: {m}")
                 continue
                 
             port = m.get("port")
             is_running = m.get("is_running", False)
-            print(f"Meeting data - port: {port}, is_running: {is_running}")
             
             if not port:
-                print("Skipping meeting with no port")
                 continue
                 
             if is_running and port not in processes:
-                print(f"Need to start server on port {port}")
-                try:
-                    processes[port] = subprocess.Popen(
-                        [sys.executable, "mini_server.py", str(port)],
-                        stdout=subprocess.PIPE,
-                        stderr=subprocess.PIPE
-                    )
-                    print(f"Started server on port {port} (PID: {processes[port].pid})")
-                except Exception as e:
-                    print(f"Failed to start server: {str(e)}")
-            
-            if not is_running and port in processes:
-                print(f"Need to stop server on port {port}")
-                try:
-                    processes[port].terminate()
-                    stdout, stderr = processes[port].communicate(timeout=5)
-                    print(f"Process output:\n{stdout.decode()}\n{stderr.decode()}")
-                    del processes[port]
-                    print(f"Stopped server on port {port}")
-                except Exception as e:
-                    print(f"Failed to stop server: {str(e)}")
-                    del processes[port]
+                start_server(port)
+            elif not is_running and port in processes:
+                stop_server(port)
         
         # Clean up dead processes
-        print("\nChecking for dead processes...")
-        for port in list(processes.keys()):
-            if processes[port].poll() is not None:
-                print(f"Cleaning up dead process for port {port}")
-                del processes[port]
+        dead_ports = [p for p in processes if processes[p].poll() is not None]
+        for port in dead_ports:
+            print(f"Cleaning up dead process for port {port}")
+            del processes[port]
                 
     except requests.exceptions.RequestException as e:
         print(f"Network error: {str(e)}")
@@ -97,5 +122,5 @@ while True:
         import traceback
         traceback.print_exc()
     
-    print("Sleeping for 2 seconds...")
+    print("Sleeping for 20 seconds...")
     time.sleep(20)
