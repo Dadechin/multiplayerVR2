@@ -98,4 +98,4 @@ while True:
         traceback.print_exc()
     
     print("Sleeping for 2 seconds...")
-    time.sleep(2)
+    time.sleep(20)
