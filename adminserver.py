@@ -20,24 +20,47 @@ print("Entering main loop...")
 def start_server(port):
     """Start the mini server on specified port"""
     try:
-        cmd = ["python3.10", "mini_server.py", str(port)]
+        cmd = ["python3.10", "-u", "mini_server.py", str(port)]
         print(f"Starting server with command: {' '.join(cmd)}")
         
-        # Start process with output redirection
         processes[port] = subprocess.Popen(
             cmd,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
-            universal_newlines=True
+            universal_newlines=True,
+            bufsize=1,
+            env={**os.environ, "PYTHONUNBUFFERED": "1"},
+            cwd=os.getcwd()  # Ensure correct working directory
         )
-        print(f"Started server on port {port} (PID: {processes[port].pid})")
+        
+        # Print process info for debugging
+        print(f"Server started (PID: {processes[port].pid})")
+        print(f"Process stdout fd: {processes[port].stdout.fileno()}")
+        print(f"Process stderr fd: {processes[port].stderr.fileno()}")
+        
+        # Start thread to monitor output
+        def monitor_output(process, port):
+            while True:
+                output = process.stdout.readline()
+                if output == '' and process.poll() is not None:
+                    break
+                if output:
+                    print(f"[Server {port}] {output.strip()}")
+        
+        import threading
+        t = threading.Thread(
+            target=monitor_output,
+            args=(processes[port], port),
+            daemon=True
+        )
+        t.start()
+        
         return True
     except Exception as e:
-        print(f"Failed to start server on port {port}: {str(e)}")
+        print(f"Failed to start server: {str(e)}")
         if port in processes:
             del processes[port]
         return False
-
 def stop_server(port):
     """Stop the mini server on specified port"""
     if port not in processes:
