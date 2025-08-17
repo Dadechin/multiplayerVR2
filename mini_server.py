@@ -28,7 +28,7 @@ async def handle_connection(websocket):
                 player_states[player_id] = data
             # Broadcast to other clients
             for client in list(clients.keys()):  # Create a copy to avoid modification during iteration
-                if (client != websocket or True) and client.state == State.OPEN:
+                if (client != websocket ) and client.state == State.OPEN:
                     try:
                         await client.send(message)
                     except websockets.exceptions.ConnectionClosed:
