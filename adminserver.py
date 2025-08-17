@@ -61,6 +61,7 @@ def start_server(port):
         if port in processes:
             del processes[port]
         return False
+
 def stop_server(port):
     """Stop the mini server on specified port"""
     if port not in processes:
@@ -116,7 +117,8 @@ while True:
             time.sleep(2)
             continue
 
-        # Process meetings and spaces
+        # Collect active ports from API
+        active_ports = set()
         for r in resources:
             if not isinstance(r, dict):
                 continue
@@ -128,11 +130,19 @@ while True:
             if not port:
                 continue
 
-            if is_running and port not in processes:
-                print(f"Starting server for {resource_type} on port {port}")
-                start_server(port)
+            if is_running:
+                active_ports.add(port)
+                if port not in processes:
+                    print(f"Starting server for {resource_type} on port {port}")
+                    start_server(port)
             elif not is_running and port in processes:
                 print(f"Stopping server for {resource_type} on port {port}")
+                stop_server(port)
+
+        # Stop servers that are no longer in API response (deleted resources)
+        for port in list(processes.keys()):
+            if port not in active_ports:
+                print(f"Resource for port {port} removed from API. Stopping server.")
                 stop_server(port)
 
         # Clean up dead processes
