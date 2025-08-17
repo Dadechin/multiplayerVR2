@@ -92,58 +92,61 @@ while True:
     print("\n=== New Iteration ===")
     print(f"Current time: {time.ctime()}")
     print(f"Active processes: {[f'{p}:{processes[p].pid}' for p in processes]}")
-    
+
     try:
-        # Check API for meetings
+        # Check API for meetings and spaces
         print("Making API request...")
         resp = requests.get(
-            f"{API_BASE}/servere_meetings/",
+            f"{API_BASE}/get_meetings_and_spaces/",
             headers={"Authorization": f"Token {ADMIN_TOKEN}"},
             timeout=5
         )
         print(f"Response received. Status: {resp.status_code}")
-        
+
         if resp.status_code != 200:
             print(f"Error: Bad status code {resp.status_code}")
             time.sleep(2)
             continue
-            
+
         try:
-            meetings = resp.json()
-            print(f"Found {len(meetings)} meetings")
+            resources = resp.json()  # Now contains both meetings & spaces
+            print(f"Found {len(resources)} resources (meetings + spaces)")
         except json.JSONDecodeError as e:
             print(f"JSON decode error: {str(e)}")
             time.sleep(2)
             continue
 
-        # Process meetings
-        for m in meetings:
-            if not isinstance(m, dict):
+        # Process meetings and spaces
+        for r in resources:
+            if not isinstance(r, dict):
                 continue
-                
-            port = m.get("port")
-            is_running = m.get("is_running", False)
-            
+
+            port = r.get("port")
+            is_running = r.get("is_running", False)
+            resource_type = r.get("type", "unknown")
+
             if not port:
                 continue
-                
+
             if is_running and port not in processes:
+                print(f"Starting server for {resource_type} on port {port}")
                 start_server(port)
             elif not is_running and port in processes:
+                print(f"Stopping server for {resource_type} on port {port}")
                 stop_server(port)
-        
+
         # Clean up dead processes
         dead_ports = [p for p in processes if processes[p].poll() is not None]
         for port in dead_ports:
             print(f"Cleaning up dead process for port {port}")
             del processes[port]
-                
+
     except requests.exceptions.RequestException as e:
         print(f"Network error: {str(e)}")
     except Exception as e:
         print(f"Unexpected error: {str(e)}")
         import traceback
         traceback.print_exc()
-    
+
     print("Sleeping for 20 seconds...")
     time.sleep(20)
